@@ -1,0 +1,341 @@
+import openpyxl
+import json
+
+# Read the Excel file
+wb = openpyxl.load_workbook('copied_values.xlsx', data_only=True)
+sheet = wb.active
+
+# Create data structure
+data = []
+for row in range(1, sheet.max_row + 1):
+    category = sheet[f'A{row}'].value
+    value = sheet[f'B{row}'].value
+    if category is not None and value is not None:
+        try:
+            value = float(value) if value != '' else 0
+        except (ValueError, TypeError):
+            value = 0
+        
+        data.append({
+            'Category': category,
+            'Value': value,
+            'Price Range (€/m²)': 85.0  # Default price range
+        })
+
+# Convert to JSON for JavaScript
+json_data = json.dumps(data)
+
+# Create the HTML with interactive features
+html_content = f"""
+<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+    <title>Vervangingsinvestering Wegen</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root[data-theme="dark"] {{
+            --background-color: #121212;
+            --surface-color: #1e1e1e;
+            --primary-color: #00bcd4;
+            --text-color: #ffffff;
+            --border-color: #333333;
+            --input-bg: #2d2d2d;
+            --hover-color: #2a2a2a;
+        }}
+        
+        :root[data-theme="light"] {{
+            --background-color: #f5f5f5;
+            --surface-color: #ffffff;
+            --primary-color: #0097a7;
+            --text-color: #333333;
+            --border-color: #e0e0e0;
+            --input-bg: #ffffff;
+            --hover-color: #f0f0f0;
+        }}
+        
+        * {{
+            transition: background-color 0.3s, color 0.3s;
+        }}
+        
+        body {{
+            margin: 0;
+            padding: 16px;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            font-size: 14px;
+        }}
+        
+        #theme-toggle {{
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 2px solid var(--primary-color);
+            background-color: var(--surface-color);
+            color: var(--text-color);
+            cursor: pointer;
+            font-family: 'Roboto', sans-serif;
+            font-weight: 500;
+            transition: all 0.3s;
+        }}
+        
+        #theme-toggle:hover {{
+            background-color: var(--primary-color);
+            color: white;
+        }}
+        
+        #visualization-container {{
+            width: 100%;
+            max-width: 1800px;
+            margin: 0 auto;
+            background-color: var(--surface-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 16px;
+            box-sizing: border-box;
+        }}
+        
+        .data-table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+            background-color: var(--surface-color);
+            font-size: 13px;
+        }}
+        
+        .data-table th, .data-table td {{
+            padding: 4px 6px;
+            text-align: right;
+            border: 1px solid var(--border-color);
+            white-space: nowrap;
+        }}
+        
+        .data-table tr:hover {{
+            background-color: var(--hover-color);
+        }}
+        
+        .data-table th {{
+            background-color: var(--surface-color);
+            font-weight: 500;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }}
+        
+        .data-table td:first-child {{
+            text-align: left;
+            position: sticky;
+            left: 0;
+            background-color: var(--surface-color);
+            z-index: 1;
+        }}
+        
+        .data-table td input {{
+            width: 70px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 13px;
+            text-align: right;
+        }}
+        
+        .data-table td input:focus {{
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.2);
+        }}
+        
+        .table-container {{
+            overflow-x: auto;
+            margin-bottom: 16px;
+            border-radius: 4px;
+            background-color: var(--surface-color);
+            max-height: 500px;
+            overflow-y: auto;
+        }}
+        
+        .charts-container {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 16px;
+        }}
+        
+        @media (max-width: 1200px) {{
+            body {{
+                padding: 8px;
+            }}
+            #visualization-container {{
+                padding: 8px;
+            }}
+            .charts-container {{
+                grid-template-columns: 1fr;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <button id="theme-toggle">Switch Theme</button>
+    <div id="visualization-container">
+        <div class="table-container">
+            <table class="data-table" id="dataTable">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Value</th>
+                        <th>Price Range (€/m²)</th>
+                        <th>Total Price (€)</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <!-- Data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+        <div class="charts-container">
+            <div id="barChart"></div>
+            <div id="pieChart"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Initial data
+        let data = {json_data};
+        
+        function formatNumber(num) {{
+            return new Intl.NumberFormat('nl-NL').format(num);
+        }}
+        
+        function updateTable() {{
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            data.forEach((item, index) => {{
+                const row = document.createElement('tr');
+                const total = item.Value * item['Price Range (€/m²)'];
+                
+                row.innerHTML = `
+                    <td>${{item.Category}}</td>
+                    <td><input type="text" value="${{formatNumber(item.Value)}}" onchange="updateValue(${{index}}, 'Value', this.value)"></td>
+                    <td><input type="text" value="${{formatNumber(item['Price Range (€/m²)'])}}" onchange="updateValue(${{index}}, 'Price Range (€/m²)', this.value)"></td>
+                    <td>€${{formatNumber(total)}}</td>
+                `;
+                
+                tbody.appendChild(row);
+            }});
+        }}
+        
+        function updateValue(index, field, value) {{
+            // Remove thousand separators and replace comma with dot
+            value = value.replace(/\./g, '').replace(',', '.');
+            const numValue = parseFloat(value);
+            
+            if (!isNaN(numValue)) {{
+                data[index][field] = numValue;
+                updateTable();
+                updateCharts();
+            }}
+        }}
+        
+        function updateCharts() {{
+            const categories = data.map(item => item.Category);
+            const totals = data.map(item => item.Value * item['Price Range (€/m²)']);
+            const total = totals.reduce((a, b) => a + b, 0);
+            const percentages = totals.map(value => (value / total * 100).toFixed(1));
+            
+            // Bar chart
+            const barData = [{{
+                x: categories,
+                y: totals,
+                type: 'bar',
+                text: totals.map(formatNumber),
+                textposition: 'auto',
+                marker: {{
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--primary-color')
+                }}
+            }}];
+            
+            const barLayout = {{
+                title: 'Kosten per Categorie',
+                paper_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--background-color'),
+                plot_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--background-color'),
+                font: {{
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--text-color'),
+                    size: 12
+                }},
+                xaxis: {{
+                    tickangle: -45,
+                    gridcolor: getComputedStyle(document.documentElement).getPropertyValue('--border-color')
+                }},
+                yaxis: {{
+                    gridcolor: getComputedStyle(document.documentElement).getPropertyValue('--border-color'),
+                    title: 'Total Price (€)'
+                }},
+                margin: {{
+                    b: 150
+                }}
+            }};
+            
+            Plotly.newPlot('barChart', barData, barLayout);
+            
+            // Pie chart
+            const pieData = [{{
+                values: totals,
+                labels: categories,
+                type: 'pie',
+                textinfo: 'label+percent',
+                hoverinfo: 'label+value',
+                textposition: 'inside'
+            }}];
+            
+            const pieLayout = {{
+                title: 'Kostenverdeling',
+                paper_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--background-color'),
+                plot_bgcolor: getComputedStyle(document.documentElement).getPropertyValue('--background-color'),
+                font: {{
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--text-color'),
+                    size: 12
+                }},
+                margin: {{
+                    t: 40,
+                    b: 40,
+                    l: 40,
+                    r: 40
+                }}
+            }};
+            
+            Plotly.newPlot('pieChart', pieData, pieLayout);
+        }}
+        
+        // Theme toggle functionality
+        const themeToggle = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+        
+        themeToggle.addEventListener('click', () => {{
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            updateCharts(); // Refresh charts with new theme colors
+        }});
+        
+        // Initialize the visualization
+        updateTable();
+        updateCharts();
+    </script>
+</body>
+</html>
+"""
+
+# Save the HTML file
+with open('vervangingsinvestering.html', 'w', encoding='utf-8') as f:
+    f.write(html_content)
+
+print("HTML file has been generated successfully")
