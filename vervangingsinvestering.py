@@ -11,12 +11,23 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Asset Management Dashboard", layout="wide")
 
 # Set locale for number formatting
-locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
+try:
+    locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
+except locale.Error:
+    try:
+        locale.setlocale(locale.LC_ALL, 'nl_NL')
+    except locale.Error:
+        # Fallback to a custom number formatting if locale is not available
+        pass
 
 def format_euro(value):
     if pd.isna(value) or value == 0:
-        return "€ 0,00"
-    return locale.currency(value, grouping=True, symbol='€')
+        return "€ 0"
+    try:
+        return locale.currency(value, grouping=True, symbol='€')
+    except locale.Error:
+        # Fallback formatting if locale is not available
+        return f"€ {value:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
 
 def clean_number(value):
     try:
