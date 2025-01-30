@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-import locale
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -10,24 +9,15 @@ from datetime import datetime, timedelta
 # Set page config
 st.set_page_config(page_title="Asset Management Dashboard", layout="wide")
 
-# Set locale for number formatting
-try:
-    locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
-except locale.Error:
-    try:
-        locale.setlocale(locale.LC_ALL, 'nl_NL')
-    except locale.Error:
-        # Fallback to a custom number formatting if locale is not available
-        pass
-
 def format_euro(value):
+    """Format a number as Euro currency with Dutch formatting (. for thousands, , for decimals)"""
     if pd.isna(value) or value == 0:
         return "€ 0"
-    try:
-        return locale.currency(value, grouping=True, symbol='€')
-    except locale.Error:
-        # Fallback formatting if locale is not available
-        return f"€ {value:,.2f}".replace(",", "@").replace(".", ",").replace("@", ".")
+    # Format with international notation first (1234.56)
+    formatted = f"{float(value):,.2f}"
+    # Convert to Dutch notation (1.234,56)
+    formatted = formatted.replace(",", "@").replace(".", ",").replace("@", ".")
+    return f"€ {formatted}"
 
 def clean_number(value):
     try:
